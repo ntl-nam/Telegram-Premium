@@ -1,0 +1,201 @@
+name: Build TelePremium Premium UI 92 APK
+
+on:
+  push:
+    branches: [ concept5-pass5 ]
+    paths:
+      - "scripts/**"
+      - "patches/**"
+      - ".github/workflows/build-login-fix.yml"
+      - ".gitmodules"
+      - "upstream/Telegram"
+  workflow_dispatch:
+
+concurrency:
+  group: telepremium-premiumui92-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+    steps:
+      - name: Checkout with Telegram source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Set up Java 17 for sdkmanager
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Free runner disk space
+        shell: bash
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/share/swift || true
+          sudo rm -rf "$ANDROID_HOME"/ndk/* || true
+          sudo rm -rf "$ANDROID_HOME"/cmake/* || true
+          sudo apt-get clean
+          df -h
+
+      - name: Install Android build components
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          echo "Using $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "ndk;21.4.7075529" \
+            "cmake;3.10.2.4988404"
+
+      - name: Apply TelePremium patches
+        run: python3 scripts/apply_telepremium_patches.py
+
+      - name: Inject Telegram API credentials
+        working-directory: upstream/Telegram
+        shell: bash
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: |
+          set -euo pipefail
+          test -n "${TELEGRAM_API_ID:-}" || { echo "TELEGRAM_API_ID secret is missing"; exit 1; }
+          test -n "${TELEGRAM_API_HASH:-}" || { echo "TELEGRAM_API_HASH secret is missing"; exit 1; }
+
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          api_id = os.environ["TELEGRAM_API_ID"].strip()
+          api_hash = os.environ["TELEGRAM_API_HASH"].strip()
+
+          if not api_id.isdigit() or int(api_id) <= 0:
+              raise SystemExit("TELEGRAM_API_ID must be a positive integer")
+          if not re.fullmatch(r"[0-9a-fA-F]{32}", api_hash):
+              raise SystemExit("TELEGRAM_API_HASH must be a 32-character hexadecimal string")
+
+          path = Path("TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java")
+          data = path.read_text(encoding="utf-8")
+
+          data, id_count = re.subn(
+              r"public static int APP_ID = \d+;",
+              f"public static int APP_ID = {api_id};",
+              data,
+              count=1,
+          )
+          data, hash_count = re.subn(
+              r'public static String APP_HASH = "[0-9a-fA-F]+";',
+              f'public static String APP_HASH = "{api_hash}";',
+              data,
+              count=1,
+          )
+
+          if id_count != 1 or hash_count != 1:
+              raise SystemExit("Could not inject Telegram API credentials into BuildVars.java")
+
+          path.write_text(data, encoding="utf-8")
+
+          if re.search(r"public static int APP_ID = 4;", data):
+              raise SystemExit("Refusing to build with Telegram public APP_ID=4")
+          print("Telegram API credentials injected from GitHub Secrets")
+          PY
+
+      - name: Verify source invariants
+        run: python3 scripts/verify_source.py
+
+      - name: Align Gradle wrapper with AGP 8.4.2
+        working-directory: upstream/Telegram
+        shell: bash
+        run: |
+          sed -i 's#gradle-7.0.2-bin.zip#gradle-8.6-bin.zip#' gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
+
+      - name: Limit CI native build to arm64-v8a
+        working-directory: upstream/Telegram
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path("TMessagesProj_App/build.gradle")
+          data = app.read_text(encoding="utf-8")
+          pattern = r'(\n\s*afat\s*\{\s*\n\s*ndk\s*\{\s*\n\s*)abiFilters[^\n]+'
+          data, count = re.subn(pattern, r'\1abiFilters "arm64-v8a"', data, count=1)
+          if count != 1:
+              raise SystemExit(f"afat ABI block match count: {count}")
+          app.write_text(data, encoding="utf-8")
+
+          lib = Path("TMessagesProj/build.gradle")
+          data = lib.read_text(encoding="utf-8")
+          marker = "        targetSdkVersion 34\n\n        vectorDrawables.generatedDensities"
+          replacement = (
+              "        targetSdkVersion 34\n\n"
+              "        ndk {\n"
+              "            abiFilters \"arm64-v8a\"\n"
+              "        }\n\n"
+              "        vectorDrawables.generatedDensities"
+          )
+          if marker not in data:
+              raise SystemExit("TMessagesProj defaultConfig marker not found")
+          data = data.replace(marker, replacement, 1)
+          lib.write_text(data, encoding="utf-8")
+          PY
+          grep -A4 -n '^[[:space:]]*afat {' TMessagesProj_App/build.gradle
+          grep -A10 -n '^[[:space:]]*defaultConfig {' TMessagesProj/build.gradle
+
+      - name: Disable Google Services plugin for fork CI build
+        working-directory: upstream/Telegram
+        shell: bash
+        run: |
+          sed -i "/apply plugin: 'com.google.gms.google-services'/d" TMessagesProj/build.gradle
+          sed -i "/apply plugin: 'com.google.gms.google-services'/d" TMessagesProj_App/build.gradle
+          ! grep -R "apply plugin: 'com.google.gms.google-services'" TMessagesProj/build.gradle TMessagesProj_App/build.gradle
+
+      - name: Build release APK
+        working-directory: upstream/Telegram
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx6g
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --build-cache :TMessagesProj_App:assembleAfatRelease
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find upstream/Telegram/TMessagesProj_App -type f -name '*.apk' | grep -E '/(afat|release)/' | head -n 1 || true)"
+          if [ -z "$APK" ]; then
+            echo "Release APK not found"
+            find upstream/Telegram/TMessagesProj_App -type f -name '*.apk' -print || true
+            exit 1
+          fi
+          OUT="TelePremium_11.4.2_Concept5_PremiumUI92_arm64.apk"
+          cp "$APK" "$OUT"
+          ls -lh "$OUT"
+          sha256sum "$OUT" | tee "${OUT}.sha256"
+
+      - name: Upload Premium UI 92 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TelePremium-Concept5-PremiumUI92-arm64
+          path: |
+            TelePremium_11.4.2_Concept5_PremiumUI92_arm64.apk
+            TelePremium_11.4.2_Concept5_PremiumUI92_arm64.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
