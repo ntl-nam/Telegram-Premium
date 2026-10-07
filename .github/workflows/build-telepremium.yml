@@ -12,6 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
+      - name: Free runner disk for Telegram native build
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          if [ -n "${ANDROID_HOME:-}" ]; then
+            sudo rm -rf "$ANDROID_HOME/system-images"
+            if [ -d "$ANDROID_HOME/ndk" ]; then
+              find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d ! -name '21.4.7075529' -exec sudo rm -rf {} \;
+            fi
+          fi
+          df -h
+          available_kb=$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR==2 {print $4}')
+          if [ "$available_kb" -lt 26214400 ]; then
+            echo "::error::Telegram native build requires at least 25 GiB of free disk"
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -29,6 +45,23 @@ jobs:
         run: |
           python3 scripts/apply_telepremium_patches.py
           python3 scripts/verify_source.py
+      - name: Configure arm64 APK for Android phone
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("upstream/Telegram")
+          app = root / "TMessagesProj_App/build.gradle"
+          text = app.read_text()
+          filters = 'abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"'
+          if filters not in text:
+              raise SystemExit("Expected upstream app ABI filters not found")
+          app.write_text(text.replace(filters, 'abiFilters "arm64-v8a"'))
+          core = root / "TMessagesProj/build.gradle"
+          text = core.read_text()
+          if "android {" not in text:
+              raise SystemExit("Expected upstream Android library configuration not found")
+          core.write_text(text.replace("android {", 'android {\n    defaultConfig { ndk { abiFilters "arm64-v8a" } }', 1))
+          PY
       - name: Build APK
         working-directory: upstream/Telegram
         run: |
@@ -36,7 +69,7 @@ jobs:
           python3 -c "import json; p='TMessagesProj_App/google-services.json'; d=json.load(open(p,encoding='utf-8')); clients=d.get('client',[]); base=clients[0] if clients else None; clone=json.loads(json.dumps(base)) if base else None; clone and clone.setdefault('client_info',{}).setdefault('android_client_info',{}).__setitem__('package_name','com.telepremium.messenger.beta'); clone and clients.append(clone); open(p,'w',encoding='utf-8').write(json.dumps(d,separators=(',',':'))) if clone else None"
           mkdir -p "$GITHUB_WORKSPACE/diagnostics"
           set +e
-          timeout --signal=TERM --kill-after=2m 75m ./gradlew TMessagesProj_App:assembleDebug --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
+          timeout --signal=TERM --kill-after=2m 75m ./gradlew TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
           build_status=${PIPESTATUS[0]}
           set -e
           echo "$build_status" > "$GITHUB_WORKSPACE/diagnostics/gradle-exit-code.txt"
