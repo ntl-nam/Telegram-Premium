@@ -34,7 +34,29 @@ jobs:
         run: |
           chmod +x gradlew
           python3 -c "import json; p='TMessagesProj_App/google-services.json'; d=json.load(open(p,encoding='utf-8')); clients=d.get('client',[]); base=clients[0] if clients else None; clone=json.loads(json.dumps(base)) if base else None; clone and clone.setdefault('client_info',{}).setdefault('android_client_info',{}).__setitem__('package_name','com.telepremium.messenger.beta'); clone and clients.append(clone); open(p,'w',encoding='utf-8').write(json.dumps(d,separators=(',',':'))) if clone else None"
-          ./gradlew TMessagesProj_App:assembleDebug --stacktrace
+          mkdir -p "$GITHUB_WORKSPACE/diagnostics"
+          set +e
+          timeout --signal=TERM --kill-after=2m 75m ./gradlew TMessagesProj_App:assembleDebug --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
+          build_status=${PIPESTATUS[0]}
+          set -e
+          echo "$build_status" > "$GITHUB_WORKSPACE/diagnostics/gradle-exit-code.txt"
+          exit "$build_status"
+      - name: Save build diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics
+          df -h > diagnostics/disk.txt
+          free -h > diagnostics/memory.txt
+          git rev-parse HEAD > diagnostics/commit.txt
+          git submodule status > diagnostics/submodules.txt
+          find upstream/Telegram -type f -path '*/build/reports/*' -name '*.html' -exec cp --parents {} diagnostics/ \;
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TelePremium-Build-Diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: diagnostics/
+          if-no-files-found: error
+          retention-days: 7
       - name: Collect APK
         if: always()
         run: |
