@@ -33,20 +33,7 @@ jobs:
         working-directory: upstream/Telegram
         run: |
           chmod +x gradlew
-          python3 - <<'PY'
-import json
-p='TMessagesProj_App/google-services.json'
-with open(p, encoding='utf-8') as f:
-    d=json.load(f)
-clients=d.get('client', [])
-if clients:
-    base=clients[0]
-    clone=json.loads(json.dumps(base))
-    clone.setdefault('client_info', {}).setdefault('android_client_info', {})['package_name']='com.telepremium.messenger.beta'
-    d['client'].append(clone)
-    with open(p,'w',encoding='utf-8') as f:
-        json.dump(d,f,separators=(',',':'))
-PY
+          python3 -c "import json; p='TMessagesProj_App/google-services.json'; d=json.load(open(p,encoding='utf-8')); clients=d.get('client',[]); base=clients[0] if clients else None; clone=json.loads(json.dumps(base)) if base else None; clone and clone.setdefault('client_info',{}).setdefault('android_client_info',{}).__setitem__('package_name','com.telepremium.messenger.beta'); clone and clients.append(clone); open(p,'w',encoding='utf-8').write(json.dumps(d,separators=(',',':'))) if clone else None"
           ./gradlew TMessagesProj_App:assembleDebug --stacktrace
       - name: Collect APK
         if: always()
