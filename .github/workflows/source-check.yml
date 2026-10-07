@@ -1,0 +1,26 @@
+name: Source Check
+
+on:
+  push:
+    branches: [ main, bootstrap-source, concept5-pass5 ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with Telegram source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Apply TelePremium patches
+        run: python3 scripts/apply_telepremium_patches.py
+
+      - name: Verify source invariants
+        run: python3 scripts/verify_source.py
+
+      - name: Show pinned upstream revision
+        run: git -C upstream/Telegram rev-parse HEAD
