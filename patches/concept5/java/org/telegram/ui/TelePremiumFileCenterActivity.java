@@ -54,7 +54,10 @@ public class TelePremiumFileCenterActivity extends BaseFragment {
         hero.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
         content.addView(hero);
 
-        TextCell cloud = addCell(content, context, "Облако", "Папки и файлы · восстановление после переустановки");\n        cloud.setOnClickListener(v -> presentFragment(new TelePremiumCloudActivity(currentAccount)));\n\n        TextView section = new TextView(context);
+        TextCell cloud = addCell(content, context, "Облако", "Папки и файлы · восстановление после переустановки");
+        cloud.setOnClickListener(v -> presentFragment(new TelePremiumCloudActivity(currentAccount)));
+
+        TextView section = new TextView(context);
         section.setText("Загрузки по аккаунтам");
         section.setTextSize(14);
         section.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

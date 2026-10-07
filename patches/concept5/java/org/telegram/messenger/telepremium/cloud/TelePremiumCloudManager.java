@@ -56,7 +56,60 @@ public final class TelePremiumCloudManager {
         return out;
     }
 
-    public CloudNode findByHash(String sha256) {\n        if(snapshot==null || sha256==null) return null;\n        for(CloudNode n:snapshot.nodes) if(n.type==CloudNode.TYPE_FILE && sha256.equals(n.sha256) && n.state==CloudNode.STATE_ACTIVE) return n;\n        return null;\n    }\n\n    public void addFile(CloudNode node, Callback callback) {\n        if(snapshot==null) { callback.onComplete(\"Cloud is not ready\"); return; }\n        snapshot.nodes.add(node); commit(callback);\n    }\n\n    public void copy(CloudNode source, String parentId, Callback callback) {\n        CloudNode n = source.type==CloudNode.TYPE_FOLDER ? CloudNode.folder(parentId, source.name + \" (копия)\") : CloudNode.file(parentId, source.name, source.mimeType, source.size, source.sha256);\n        n.telegramMessageId=source.telegramMessageId; n.telegramDocumentId=source.telegramDocumentId; n.originalName=source.originalName;\n        snapshot.nodes.add(n); commit(callback);\n    }\n\n    public List<CloudNode> trashItems() {\n        if(snapshot==null) return Collections.emptyList();\n        ArrayList<CloudNode> out=new ArrayList<>(); for(CloudNode n:snapshot.nodes) if(n.state==CloudNode.STATE_TRASHED) out.add(n); return out;\n    }\n\n    public List<CloudNode> favorites() {\n        if(snapshot==null) return Collections.emptyList();\n        ArrayList<CloudNode> out=new ArrayList<>(); for(CloudNode n:snapshot.nodes) if(n.favorite && n.state==CloudNode.STATE_ACTIVE) out.add(n); return out;\n    }\n\n    public List<CloudNode> search(String query) {\n        if(snapshot==null || query==null) return Collections.emptyList();\n        String q=query.trim().toLowerCase(); ArrayList<CloudNode> out=new ArrayList<>();\n        for(CloudNode n:snapshot.nodes) if(n.state==CloudNode.STATE_ACTIVE && !\"root\".equals(n.id) && n.name!=null && n.name.toLowerCase().contains(q)) out.add(n);\n        return out;\n    }\n\n    public List<CloudNode> category(String kind) {\n        if(snapshot==null)return Collections.emptyList(); ArrayList<CloudNode> out=new ArrayList<>();\n        for(CloudNode n:snapshot.nodes){if(n.type!=CloudNode.TYPE_FILE||n.state!=CloudNode.STATE_ACTIVE)continue; String x=(n.name==null?\"\":n.name).toLowerCase(); String m=n.mimeType==null?\"\":n.mimeType;\n            boolean hit=(\"images\".equals(kind)&&m.startsWith(\"image/\")) || (\"video\".equals(kind)&&m.startsWith(\"video/\")) || (\"audio\".equals(kind)&&m.startsWith(\"audio/\")) || (\"apk\".equals(kind)&&x.endsWith(\".apk\")) || (\"archives\".equals(kind)&&(x.endsWith(\".zip\")||x.endsWith(\".rar\")||x.endsWith(\".7z\"))) || (\"documents\".equals(kind)&&(m.startsWith(\"text/\")||x.endsWith(\".pdf\")||x.endsWith(\".doc\")||x.endsWith(\".docx\")||x.endsWith(\".xls\")||x.endsWith(\".xlsx\")));\n            if(hit)out.add(n);}\n        return out;\n    }\n\n    public int payloadReferenceCount(CloudNode node) {\n        if(snapshot==null||node==null||node.telegramDocumentId==0)return 0; int count=0;\n        for(CloudNode n:snapshot.nodes)if(n.telegramDocumentId==node.telegramDocumentId && n.state!=CloudNode.STATE_TRASHED)count++; return count;\n    }\n\n    public void deleteMetadataPermanently(CloudNode node, Callback callback) {\n        if(snapshot==null||node==null){callback.onComplete(\"Cloud is not ready\");return;} snapshot.nodes.remove(node); commit(callback);\n    }\n\n    public CloudIntegrityChecker.Result checkIntegrity(){return new CloudIntegrityChecker().check(snapshot);}\n\n    public void createFolder(String parentId, String name, Callback callback) {
+    public CloudNode findByHash(String sha256) {
+        if(snapshot==null || sha256==null) return null;
+        for(CloudNode n:snapshot.nodes) if(n.type==CloudNode.TYPE_FILE && sha256.equals(n.sha256) && n.state==CloudNode.STATE_ACTIVE) return n;
+        return null;
+    }
+
+    public void addFile(CloudNode node, Callback callback) {
+        if(snapshot==null) { callback.onComplete("Cloud is not ready"); return; }
+        snapshot.nodes.add(node); commit(callback);
+    }
+
+    public void copy(CloudNode source, String parentId, Callback callback) {
+        CloudNode n = source.type==CloudNode.TYPE_FOLDER ? CloudNode.folder(parentId, source.name + " (копия)") : CloudNode.file(parentId, source.name, source.mimeType, source.size, source.sha256);
+        n.telegramMessageId=source.telegramMessageId; n.telegramDocumentId=source.telegramDocumentId; n.originalName=source.originalName;
+        snapshot.nodes.add(n); commit(callback);
+    }
+
+    public List<CloudNode> trashItems() {
+        if(snapshot==null) return Collections.emptyList();
+        ArrayList<CloudNode> out=new ArrayList<>(); for(CloudNode n:snapshot.nodes) if(n.state==CloudNode.STATE_TRASHED) out.add(n); return out;
+    }
+
+    public List<CloudNode> favorites() {
+        if(snapshot==null) return Collections.emptyList();
+        ArrayList<CloudNode> out=new ArrayList<>(); for(CloudNode n:snapshot.nodes) if(n.favorite && n.state==CloudNode.STATE_ACTIVE) out.add(n); return out;
+    }
+
+    public List<CloudNode> search(String query) {
+        if(snapshot==null || query==null) return Collections.emptyList();
+        String q=query.trim().toLowerCase(); ArrayList<CloudNode> out=new ArrayList<>();
+        for(CloudNode n:snapshot.nodes) if(n.state==CloudNode.STATE_ACTIVE && !"root".equals(n.id) && n.name!=null && n.name.toLowerCase().contains(q)) out.add(n);
+        return out;
+    }
+
+    public List<CloudNode> category(String kind) {
+        if(snapshot==null)return Collections.emptyList(); ArrayList<CloudNode> out=new ArrayList<>();
+        for(CloudNode n:snapshot.nodes){if(n.type!=CloudNode.TYPE_FILE||n.state!=CloudNode.STATE_ACTIVE)continue; String x=(n.name==null?"":n.name).toLowerCase(); String m=n.mimeType==null?"":n.mimeType;
+            boolean hit=("images".equals(kind)&&m.startsWith("image/")) || ("video".equals(kind)&&m.startsWith("video/")) || ("audio".equals(kind)&&m.startsWith("audio/")) || ("apk".equals(kind)&&x.endsWith(".apk")) || ("archives".equals(kind)&&(x.endsWith(".zip")||x.endsWith(".rar")||x.endsWith(".7z"))) || ("documents".equals(kind)&&(m.startsWith("text/")||x.endsWith(".pdf")||x.endsWith(".doc")||x.endsWith(".docx")||x.endsWith(".xls")||x.endsWith(".xlsx")));
+            if(hit)out.add(n);}
+        return out;
+    }
+
+    public int payloadReferenceCount(CloudNode node) {
+        if(snapshot==null||node==null||node.telegramDocumentId==0)return 0; int count=0;
+        for(CloudNode n:snapshot.nodes)if(n.telegramDocumentId==node.telegramDocumentId && n.state!=CloudNode.STATE_TRASHED)count++; return count;
+    }
+
+    public void deleteMetadataPermanently(CloudNode node, Callback callback) {
+        if(snapshot==null||node==null){callback.onComplete("Cloud is not ready");return;} snapshot.nodes.remove(node); commit(callback);
+    }
+
+    public CloudIntegrityChecker.Result checkIntegrity(){return new CloudIntegrityChecker().check(snapshot);}
+
+    public void createFolder(String parentId, String name, Callback callback) {
         if(snapshot==null) { callback.onComplete("Cloud is not ready"); return; }
         snapshot.nodes.add(CloudNode.folder(parentId, name));
         commit(callback);
