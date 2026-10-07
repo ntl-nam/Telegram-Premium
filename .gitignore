@@ -1,0 +1,20 @@
+# Local build output
+/build/
+/out/
+*.apk
+*.aab
+
+# Android/Gradle local state
+.gradle/
+local.properties
+.idea/
+*.iml
+
+# Signing material
+*.jks
+*.keystore
+keystore.properties
+
+# Python
+__pycache__/
+*.pyc
