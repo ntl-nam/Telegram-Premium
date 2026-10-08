@@ -1,6 +1,7 @@
 package org.telegram.messenger.telepremium.cloud;
 
 import android.net.Uri;
+import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLoader;
@@ -62,7 +63,7 @@ public final class CloudPayloadRepository implements NotificationCenter.Notifica
         NotificationCenter.getInstance(account).addObserver(this,NotificationCenter.messageReceivedByServer);
         long selfId=UserConfig.getInstance(account).getClientUserId();
         SendMessagesHelper.prepareSendingDocument(
-                account,
+                AccountInstance.getInstance(account),
                 file.getAbsolutePath(),
                 file.getAbsolutePath(),
                 null,
@@ -73,8 +74,13 @@ public final class CloudPayloadRepository implements NotificationCenter.Notifica
                 null,
                 null,
                 null,
+                null,
                 false,
-                0
+                0,
+                null,
+                null,
+                0,
+                false
         );
     }
 
@@ -109,3 +115,4 @@ public final class CloudPayloadRepository implements NotificationCenter.Notifica
         done.callback.onComplete(null,"Отменено");
     }
 }
+

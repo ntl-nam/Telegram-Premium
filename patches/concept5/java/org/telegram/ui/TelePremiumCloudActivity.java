@@ -76,13 +76,13 @@ public class TelePremiumCloudActivity extends BaseFragment {
 
         List<CloudNode> nodes=cloud.children(folderId, false);
         if(nodes.isEmpty()) {
-            showStatus(context, "Папка пуста\nСтруктура хранится в Telegram Cloud и восстановится после переустановки.");
+            appendStatus(context, "Папка пуста\nСтруктура хранится в Telegram Cloud и восстановится после переустановки.");
             return;
         }
         for(CloudNode node:nodes) {
             TextCell cell=new TextCell(context, getResourceProvider());
-            String state=node.offlineState==CloudDownloadManager.OFFLINE_AVAILABLE?"✓ Offline":node.offlineState==CloudDownloadManager.DOWNLOADING?"Скачивание":"☁";
-            String value=node.type==CloudNode.TYPE_FOLDER ? "Папка · ☁" : humanSize(node.size)+" · "+state;
+            String offlineLabel=node.offlineState==CloudDownloadManager.OFFLINE_AVAILABLE?"✓ Offline":node.offlineState==CloudDownloadManager.DOWNLOADING?"Скачивание":"☁";
+            String value=node.type==CloudNode.TYPE_FOLDER ? "Папка · ☁" : humanSize(node.size)+" · "+offlineLabel;
             cell.setTextAndValue((node.type==CloudNode.TYPE_FOLDER ? "📁 " : "📄 ")+node.name, value, true);
             cell.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
             cell.setOnClickListener(v -> {
@@ -148,6 +148,10 @@ public class TelePremiumCloudActivity extends BaseFragment {
 
     private void showStatus(Context context,String text) {
         content.removeAllViews();
+        appendStatus(context, text);
+    }
+
+    private void appendStatus(Context context,String text) {
         TextView v=new TextView(context); v.setText(text); v.setTextSize(15); v.setPadding(AndroidUtilities.dp(21),AndroidUtilities.dp(28),AndroidUtilities.dp(21),AndroidUtilities.dp(28));
         v.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteGrayText)); content.addView(v);
     }
@@ -156,3 +160,4 @@ public class TelePremiumCloudActivity extends BaseFragment {
         if(n<1024)return n+" B"; if(n<1024*1024)return (n/1024)+" KB"; if(n<1024L*1024*1024)return (n/(1024*1024))+" MB"; return String.format("%.1f GB",n/(1024d*1024d*1024d));
     }
 }
+

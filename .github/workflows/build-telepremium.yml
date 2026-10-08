@@ -43,6 +43,7 @@ jobs:
 
       - name: Apply TelePremium patches
         run: |
+          java scripts/CheckJavaSyntax.java
           python3 scripts/apply_telepremium_patches.py
           python3 scripts/verify_source.py
       - name: Configure arm64 APK for Android phone
@@ -62,14 +63,26 @@ jobs:
               raise SystemExit("Expected upstream Android library configuration not found")
           core.write_text(text.replace("android {", 'android {\n    defaultConfig { ndk { abiFilters "arm64-v8a" } }', 1))
           PY
-      - name: Build APK
+      - name: Prepare Gradle build
         working-directory: upstream/Telegram
         run: |
           chmod +x gradlew
           python3 -c "import json; p='TMessagesProj_App/google-services.json'; d=json.load(open(p,encoding='utf-8')); clients=d.get('client',[]); base=clients[0] if clients else None; clone=json.loads(json.dumps(base)) if base else None; clone and clone.setdefault('client_info',{}).setdefault('android_client_info',{}).__setitem__('package_name','com.telepremium.messenger.beta'); clone and clients.append(clone); open(p,'w',encoding='utf-8').write(json.dumps(d,separators=(',',':'))) if clone else None"
           mkdir -p "$GITHUB_WORKSPACE/diagnostics"
+      - name: Compile Java before native APK build
+        working-directory: upstream/Telegram
+        run: |
           set +e
-          timeout --signal=TERM --kill-after=2m 75m ./gradlew TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
+          timeout --signal=TERM --kill-after=1m 20m ./gradlew :TMessagesProj:compileDebugJavaWithJavac --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-java.log"
+          compile_status=${PIPESTATUS[0]}
+          set -e
+          echo "$compile_status" > "$GITHUB_WORKSPACE/diagnostics/java-exit-code.txt"
+          exit "$compile_status"
+      - name: Build APK
+        working-directory: upstream/Telegram
+        run: |
+          set +e
+          timeout --signal=TERM --kill-after=2m 65m ./gradlew TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
           build_status=${PIPESTATUS[0]}
           set -e
           echo "$build_status" > "$GITHUB_WORKSPACE/diagnostics/gradle-exit-code.txt"
@@ -102,4 +115,4 @@ jobs:
           path: artifacts/*.apk
           if-no-files-found: warn
 
-# compile-fix trigger
+
