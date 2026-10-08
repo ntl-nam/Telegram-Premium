@@ -73,7 +73,7 @@ jobs:
         working-directory: upstream/Telegram
         run: |
           set +e
-          timeout --signal=TERM --kill-after=1m 20m ./gradlew :TMessagesProj:compileDebugJavaWithJavac --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-java.log"
+          timeout --signal=TERM --kill-after=1m 20m ./gradlew :TMessagesProj:compileReleaseJavaWithJavac --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-java.log"
           compile_status=${PIPESTATUS[0]}
           set -e
           echo "$compile_status" > "$GITHUB_WORKSPACE/diagnostics/java-exit-code.txt"
@@ -82,7 +82,7 @@ jobs:
         working-directory: upstream/Telegram
         run: |
           set +e
-          timeout --signal=TERM --kill-after=2m 65m ./gradlew TMessagesProj_App:assembleAfatDebug --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
+          timeout --signal=TERM --kill-after=2m 65m ./gradlew TMessagesProj_App:assembleAfatRelease --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-build.log"
           build_status=${PIPESTATUS[0]}
           set -e
           echo "$build_status" > "$GITHUB_WORKSPACE/diagnostics/gradle-exit-code.txt"
