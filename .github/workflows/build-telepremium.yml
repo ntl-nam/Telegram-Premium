@@ -46,6 +46,11 @@ jobs:
           java scripts/CheckJavaSyntax.java
           python3 scripts/apply_telepremium_patches.py
           python3 scripts/verify_source.py
+      - name: Inject Telegram API credentials
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+        run: python3 scripts/configure_telegram_api.py
       - name: Configure arm64 APK for Android phone
         run: |
           python3 - <<'PY'
@@ -120,12 +125,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Collect APK
-        if: always()
+        if: success()
         run: |
           mkdir -p artifacts
           find upstream/Telegram -type f -name '*.apk' -exec cp {} artifacts/ \; || true
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: TelePremium-Cloud-APK
           path: artifacts/*.apk
