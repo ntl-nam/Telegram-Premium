@@ -67,13 +67,29 @@ jobs:
         working-directory: upstream/Telegram
         run: |
           chmod +x gradlew
-          python3 -c "import json; p='TMessagesProj_App/google-services.json'; d=json.load(open(p,encoding='utf-8')); clients=d.get('client',[]); base=clients[0] if clients else None; clone=json.loads(json.dumps(base)) if base else None; clone and clone.setdefault('client_info',{}).setdefault('android_client_info',{}).__setitem__('package_name','com.telepremium.messenger.beta'); clone and clients.append(clone); open(p,'w',encoding='utf-8').write(json.dumps(d,separators=(',',':'))) if clone else None"
+          python3 - <<'PYCONFIG'
+          import copy
+          import json
+          from pathlib import Path
+          path = Path("TMessagesProj_App/google-services.json")
+          config = json.loads(path.read_text())
+          clients = config.get("client", [])
+          if not clients:
+              raise SystemExit("Google Services configuration has no client")
+          packages = {c["client_info"]["android_client_info"]["package_name"] for c in clients}
+          for package in ("com.telepremium.messenger", "com.telepremium.messenger.beta"):
+              if package not in packages:
+                  client = copy.deepcopy(clients[0])
+                  client["client_info"]["android_client_info"]["package_name"] = package
+                  clients.append(client)
+          path.write_text(json.dumps(config))
+          PYCONFIG
           mkdir -p "$GITHUB_WORKSPACE/diagnostics"
-      - name: Compile Java before native APK build
+      - name: Check release resources and Java before native build
         working-directory: upstream/Telegram
         run: |
           set +e
-          timeout --signal=TERM --kill-after=1m 20m ./gradlew :TMessagesProj:compileReleaseJavaWithJavac --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-java.log"
+          timeout --signal=TERM --kill-after=1m 20m ./gradlew :TMessagesProj_App:processAfatReleaseResources :TMessagesProj:compileReleaseJavaWithJavac --stacktrace --console=plain 2>&1 | tee "$GITHUB_WORKSPACE/diagnostics/gradle-java.log"
           compile_status=${PIPESTATUS[0]}
           set -e
           echo "$compile_status" > "$GITHUB_WORKSPACE/diagnostics/java-exit-code.txt"
